@@ -1,0 +1,7 @@
+<?php
+/**
+ * @file
+ * Code for the Bebinh Content feature.
+ */
+
+include_once 'bebinh_content.features.inc';

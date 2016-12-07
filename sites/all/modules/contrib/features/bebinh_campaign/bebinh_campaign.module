@@ -1,0 +1,134 @@
+<?php
+
+/**
+ * @file
+ * Code for the Bebinh Campaign feature.
+ */
+include_once 'bebinh_campaign.features.inc';
+
+/*
+ * Implement hook_menu
+ */
+
+function bebinh_campaign_menu() {
+    $items['admin/campaign/%node'] = array(
+      'title' => 'Update redirect',
+      'page callback' => 'bebinh_campaign_sendmail',
+      'page arguments' => array(2),
+      'access arguments' => array('administer bebinh settings'),
+      'type' => MENU_LOCAL_ACTION,
+    );
+    return $items;
+}
+
+/**
+ * Implements hook_permission().
+ */
+function bebinh_campaign_permission() {
+    return array(
+      'administer bebinh settings' => array(
+        'title' => t('Access Bebinh campaign'),
+        'description' => t('Allow users to access to campaign send email.'),
+      ),
+    );
+}
+
+/**
+ * Implements hook_mail().
+ */
+/*
+ * 	drupal mail looks for a function that matches the first parameter _ mail to build the message
+ */
+function bebinh_campaign_mail($key, &$message, $params) {
+    switch ($key) {
+        case 'campaign':
+            $headers = array(
+              'MIME-Version' => '1.0',
+              'Content-Type' => 'text/html; charset=UTF-8; format=flowed',
+              'Content-Transfer-Encoding' => '8Bit',
+              'X-Mailer' => 'Drupal'
+            );
+            foreach ($headers as $key => $value) {
+                $message['headers'][$key] = $value;
+            };
+            $message['subject'] = t($params['subject']);
+            $message['body'][] = $params['body'];
+            $message['params']['attachments'][] = $params['attachment'];
+            break;
+    }
+}
+
+/*
+ * Implement_hook Batch Api
+ */
+
+function bebinh_campaign_sendmail($node) {
+
+    $nids = taxonomy_select_nodes($node->field_customer_group[LANGUAGE_NONE][0]['tid'], FALSE, FALSE);
+
+    $node_cams = node_load_multiple($nids);
+    $operations = array();
+    foreach ($node_cams as $node_cam) {
+        if ($node_cam->type == 'customer') {
+            $operations[] = array('bebinh_campaign_operator_sendmail', array($node, $node_cam));
+        }
+    }
+
+    $batch = array(
+      'operations' => $operations,
+      'finished' => 'bebinh_campaign_operator_sendmail_finished',
+      'title' => t('Processing send email campaign'),
+      'error_message' => t('Example Batch has encountered an error.'),
+    );
+    batch_set($batch);
+    batch_process('admin/manage-campaign');
+}
+
+/*
+ * Implement batch detail camopaign
+ */
+
+function bebinh_campaign_operator_sendmail($node, $node_cam, &$context) {
+
+    if ($node_cam->field_email && !empty($node_cam->field_email[LANGUAGE_NONE][0]['value'])) {
+	    if(valid_email_address($node_cam->field_email[LANGUAGE_NONE][0]['value'])){
+			$params = array();
+			$to = $node_cam->field_email[LANGUAGE_NONE][0]['value'];
+			$params['subject'] = $node->title;
+			$params['body'] = $node->body[LANGUAGE_NONE][0]['value'];
+			// Add an associative array about this desired attachment.
+			if ($node->field_file_attach) {
+				$attachment = array(
+				  'filecontent' => file_get_contents($node->field_file_attach[LANGUAGE_NONE][0]['uri']),
+				  'filemime' => $node->field_file_attach[LANGUAGE_NONE][0]['filemime'],
+				  'filename' => $node->field_file_attach[LANGUAGE_NONE][0]['filename'],
+				  'filepath' => NULL,
+				);
+				$params['attachment'] = $attachment;
+			}
+			drupal_mail('bebinh_campaign', 'campaign', $to, language_default(), $params, 'no-reply@bebinhvn.com', TRUE);
+			$node->status = 1;
+			node_save($node);
+			$context['results'][] = $node_cam->nid;
+			//  Optional message displayed under the progressbar.
+			$context['message'] = t('Processing to send email "@title"', array('@title' => $node_cam->field_email[LANGUAGE_NONE][0]['value']));
+		}
+	}
+}
+
+/*
+ * Implement finish batch
+ */
+
+function bebinh_campaign_operator_sendmail_finished($success, $results, $operations) {
+    if ($success) {
+        // Here we could do something meaningful with the results.
+        // We just display the number of nodes we processed...
+        drupal_set_message(t('@count email  is sent.', array('@count' => count($results))));
+    } else {
+        // An error occurred.
+        // $operations contains the operations that remained unprocessed.
+        $error_operation = reset($operations);
+        drupal_set_message(t('An error occurred while processing @operation with arguments : @args', array('@operation' => $error_operation[0], '@args' => print_r($error_operation[0], TRUE))));
+    }
+}

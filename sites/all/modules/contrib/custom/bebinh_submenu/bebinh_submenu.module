@@ -1,0 +1,225 @@
+<?php
+
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+/*
+ * Implement hook_init()
+ */
+
+function bebinh_submenu_init() {
+    drupal_add_js(drupal_get_path('module', 'bebinh_submenu') . '/bebinh.js');
+    drupal_add_css(drupal_get_path('theme', 'bebinh') . '/css/admin_panel/admin-panel.css');
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function bebinh_submenu_block_info() {
+    $blocks['menu_subcategory'] = array(
+      'info' => t('Sub Category'),
+      'cache' => DRUPAL_NO_CACHE,
+    );
+    return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function bebinh_submenu_block_view($delta = '') {
+    $block = array();
+    switch ($delta) {
+        case 'menu_subcategory':
+            $block['content'] = bebinh_subcategory_get_by_parent();
+            break;
+    }
+
+
+    return $block;
+}
+
+/*
+ * Implement Get list child of category
+ */
+
+function bebinh_subcategory_get_by_parent() {
+    if(arg(0)=='taxonomy' && arg(1)=='term' && is_numeric(arg(2))){
+        $tid = arg(2);
+    }
+    elseif(arg(0)=='node' && is_numeric(arg(1))){
+        $node = menu_get_object('node');
+        $term = taxonomy_term_load($node->field_category[LANGUAGE_NONE][0]['tid']);
+        $parents = taxonomy_get_parents($term->tid);
+        if($parents){
+            foreach($parents as $parent){
+                $parent_parents = taxonomy_get_parents($parent->tid);
+                if($parent_parents){
+                    foreach($parent_parents as $parent_parent){
+                        $tid = $parent_parent->tid;
+                    }
+                }else{
+                    $tid = $parent->tid;
+                }
+            }
+            
+        }
+    }
+    $output = null;
+    $active = '';
+    $active2 = '';
+    if (empty($tid)) {
+        $tid = is_numeric(arg(2)) ? arg(2) : '';
+    }
+    $parent = taxonomy_get_parents($tid);
+    if ($parent) {
+        $output .= '<div id="sidebar-menu-wrapper">';
+        $output .= '<ul class="level1">';
+        $parents = array_keys($parent);
+        $pid = $parents[0];
+        $parent_max = taxonomy_get_parents($pid);
+        if ($parent_max) {
+            $parents_id = array_keys($parent_max);
+            $pid = $parents_id[0];
+        }
+        $terms = taxonomy_get_children($pid);
+        $j = 0;
+        $class = '';
+        foreach ($terms as $term) {
+            $child2 = taxonomy_get_children($term->tid);
+            if ($j == count($terms) - 1) {
+                $class = 'last';
+            }
+            if (arg(2) == $term->tid) {
+                $active = 'class="active"';
+            }
+            if ($child2) {
+                $output .= '<li class="level1 ' . $class . '"><a ' . $active . ' href="' . url('taxonomy/term/' . $term->tid) . '">' . $term->name . '</a>';
+                $output .= '<ul class="level2">';
+                foreach ($child2 as $child) {
+                    if (arg(2) == $child->tid) {
+                        $active2 = 'class="active"';
+                    }
+                    $output .= '<li class="level2"><a ' . $active2 . ' href="' . url('taxonomy/term/' . $child->tid) . '">' . $child->name . '</a></li>';
+                }
+                $output .= '</ul></li>';
+            } else {
+                $output .= '<li class="level1 ' . $class . '"><a ' . $active . '  href="' . url('taxonomy/term/' . $term->tid) . '">' . $term->name . '</a></li>';
+            }
+            $j ++;
+        }
+        $output .= '</ul></div>';
+    } else {
+        $terms = taxonomy_get_children($tid);
+        $j = 0;
+        $class = '';
+        if ($terms) {
+            $output .= '<div id="sidebar-menu-wrapper">';
+            $output .= '<ul class="level1">';
+            foreach ($terms as $term) {
+                $child2 = taxonomy_get_children($term->tid);
+                if ($j == count($terms) - 1) {
+                    $class = 'last';
+                }
+                if (arg(2) == $term->tid) {
+                    $active = 'class="active"';
+                }
+                if ($child2) {
+
+                    $output .= '<li class="level1 ' . $class . '"><a ' . $active . ' href="' . url('taxonomy/term/' . $term->tid) . '">' . $term->name . '</a>';
+                    $output .= '<ul class="level2">';
+                    foreach ($child2 as $child) {
+                        if (arg(2) == $child->tid) {
+                            $active2 = 'class="active"';
+                        }
+                        $output .= '<li class="level2"><a ' . $active2 . ' href="' . url('taxonomy/term/' . $child->tid) . '">' . $child->name . '</a></li>';
+                    }
+                    $output .= '</ul></li>';
+                } else {
+                    $output .= '<li class="level1 ' . $class . '"><a ' . $active . ' href="' . url('taxonomy/term/' . $term->tid) . '">' . $term->name . '</a></li>';
+                }
+                $j ++;
+            }
+            $output .= '</ul></div>';
+        }
+    }
+
+    return $output;
+}
+
+/*
+ * Implement hook_form_views_exposed_form_alter();
+ */
+
+function bebinh_submenu_form_views_exposed_form_alter(&$form, &$form_state) {
+    if ($form['#id'] == 'views-exposed-form-product-home-page-1') {
+        //dsm($form);
+        $form['field_brand_tid']['#options']['All'] = t('Chọn nhãn hiệu');
+        $form['title']['#attributes']['placeholder'] = t('Nhập từ khoá...');
+    }
+}
+
+/*
+ * Implement hook_node_views
+ */
+
+function bebinh_submenu_node_view($node, $view_mode, $langcode) {
+    if ($node->type == 'product') {
+        if ($node->field_sell_price) {
+            if (is_numeric($node->field_sell_price[LANGUAGE_NONE][0]['value'])) {
+                $node->content['field_sell_price'] = array(
+                  "#markup" => '<div class="field field-name-field-sell-price field-type-text field-label-inline clearfix"><div class="field-label">Giá bán:&nbsp;</div><div class="field-items"><div class="field-item even">' . number_format($node->field_sell_price[LANGUAGE_NONE][0]['value'], 0) . ' VND</div></div></div>',
+                  "#weight" => 100
+                );
+            } else {
+                $node->content['field_sell_price'] = array(
+                  "#markup" => '<div class="field field-name-field-sell-price field-type-text field-label-inline clearfix"><div class="field-label">Giá bán:&nbsp;</div><div class="field-items"><div class="field-item even"><a href="/lien-he">Liên hệ</a></div></div></div>',
+                  "#weight" => 100
+                );
+            }
+        }
+        if ($node->field_old_price && $node->field_is_promotion[LANGUAGE_NONE][0]['value'] == 1) {
+            $node->content['field_old_price'] = array(
+              "#markup" => '<div class="field field-name-field-old-price field-type-text field-label-inline clearfix"><div class="field-label">Giá cũ:&nbsp;</div><div class="field-items"><div class="field-item even">' . number_format($node->field_old_price[LANGUAGE_NONE][0]['value'], 0) . ' VND</div></div></div>',
+              "#weight" => 100
+            );
+        }
+        if ($node->field_promotion_content && $node->field_is_promotion[LANGUAGE_NONE][0]['value'] == 1) {
+            $node->content['field_old_price'] = array(
+              "#markup" => '<div style="margin-bottom:20px;" class="field field-name-field-promotion-content field-type-text field-label-inline clearfix"><div class="field-label">Thông tin khuyến mãi:&nbsp;</div><div class="field-items"><div class="field-item even">' . $node->field_promotion_content[LANGUAGE_NONE][0]['value'] . '</div></div></div>',
+              "#weight" => 110
+            );
+        }
+        unset($node->content['field_size']);
+        if($node->field_size && !empty($node->field_size[LANGUAGE_NONE][0]['value'])){
+            $node->content['field_size'] = array(
+              "#markup" => '<div class="field field-name-field-size field-type-text field-label-inline clearfix"><div class="field-label">Size:&nbsp;</div><div class="field-items"><div class="field-item even" property="schema:width">'.$node->field_size[LANGUAGE_NONE][0]['value'].'</div></div></div>',
+              "#weight" => 99
+            );
+        }
+        
+    }
+}
+
+function bebinh_submenu_views_query_alter(&$view, &$query) {
+    if($view->name=='product_home' && $view->current_display == 'block_2'){
+        $node = menu_get_object('node');
+        //dsm($query->where);
+        $query->where[1]['conditions'][] = array(
+          'field' => 'node.nid',
+          'value' => $node->nid,
+          'operator' => '<>'
+        );
+    }
+}
+
+/*
+ * Implement hook_node_presave
+ */
+
+function bebinh_submenu_node_presave($node){
+    if (!user_access("administer nodes")) { // skip if user has admmin permission
+    $node->status = 0; // unpublish the node
+  }
+}

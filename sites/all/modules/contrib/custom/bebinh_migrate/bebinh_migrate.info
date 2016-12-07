@@ -1,0 +1,6 @@
+name = Bebinhco Migrate data
+package = Bebinhco
+description = "Bebinh Migrate data"
+version = VERSION
+core = 7.x
+

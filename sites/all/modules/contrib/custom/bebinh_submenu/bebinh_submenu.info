@@ -1,0 +1,6 @@
+name = Bebinhco Sub-Ctegory
+package = Bebinhco
+description = "Bebinh sub-category for Category show in left sidebar"
+version = VERSION
+core = 7.x
+
